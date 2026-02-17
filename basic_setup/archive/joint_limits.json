@@ -1,0 +1,34 @@
+{
+  "joint_limits": {
+    "shoulder_pan": {
+      "id": 1,
+      "min": 803,
+      "max": 3291
+    },
+    "shoulder_lift": {
+      "id": 2,
+      "min": 783,
+      "max": 3144
+    },
+    "elbow_flex": {
+      "id": 3,
+      "min": 55,
+      "max": 2000
+    },
+    "wrist_flex": {
+      "id": 4,
+      "min": 957,
+      "max": 3057
+    },
+    "wrist_roll": {
+      "id": 5,
+      "min": 251,
+      "max": 3849
+    },
+    "gripper": {
+      "id": 6,
+      "min": 2075,
+      "max": 3322
+    }
+  }
+}

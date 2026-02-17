@@ -69,6 +69,19 @@ python 03_keyboard_teleop.py --port /dev/tty.usbmodemXXXXX
 Move the arm from your keyboard. Toggle torque off to move by hand.
 Press `v` for verbose mode to see every packet.
 
+### Step 3 (simpler): Easy keyboard control
+```bash
+python 03_easy_keyboard_teleop.py --port /dev/tty.usbmodemXXXXX
+```
+Direct fixed keys per joint. No limits layer; minimal code path.
+
+### Optional calibration tools
+```bash
+python 06_set_midpoint_pose.py --port /dev/tty.usbmodemXXXXX
+python 05_capture_joint_limits.py --port /dev/tty.usbmodemXXXXX
+```
+Use only if you want midpoint or custom limit calibration workflows.
+
 ### Step 4: Record and replay
 ```bash
 # Record: move arm by hand while positions are logged
