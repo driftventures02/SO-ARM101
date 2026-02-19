@@ -55,10 +55,10 @@ def read_positions(bus: ServoBus):
     # Fast path: one SYNC_READ call for all motors.
     out = {}
     packets = bus.sync_read(MOTOR_IDS, REG_PRESENT_POSITION, 2)
-    for mid in MOTOR_IDS:
-        pkt = packets.get(mid)
+    for motor_id in MOTOR_IDS:
+        pkt = packets.get(motor_id)
         if pkt and len(pkt["params"]) >= 2:
-            out[mid] = to_u16(pkt["params"][0], pkt["params"][1])
+            out[motor_id] = to_u16(pkt["params"][0], pkt["params"][1])
     return out
 
 
@@ -93,11 +93,11 @@ def main():
     torque_on = True
     # Start by setting safe goals first, then enable torque.
     goals = read_positions(bus)
-    for mid in MOTOR_IDS:
-        goals.setdefault(mid, 2048)
+    for motor_id in MOTOR_IDS:
+        goals.setdefault(motor_id, 2048)
     # Hardware-side smoothing: non-zero acceleration softens start/stop.
-    for mid in MOTOR_IDS:
-        bus.write_reg(mid, REG_ACCELERATION, accel, 1)
+    for motor_id in MOTOR_IDS:
+        bus.write_reg(motor_id, REG_ACCELERATION, accel, 1)
         time.sleep(0.002)
     sync_goals_to_current(bus, goals)
     bus.set_torque_all(MOTOR_IDS, True)
@@ -105,8 +105,8 @@ def main():
     ui_period = 1.0 / max(1.0, args.ui_hz)
     last_ui = 0.0
     last_control = 0.0
-    held_dir = {mid: 0 for mid in MOTOR_IDS}
-    held_until = {mid: 0.0 for mid in MOTOR_IDS}
+    held_dir = {motor_id: 0 for motor_id in MOTOR_IDS}
+    held_until = {motor_id: 0.0 for motor_id in MOTOR_IDS}
 
     try:
         while True:
@@ -132,29 +132,29 @@ def main():
                 # Safety behavior: "z" now means hold current pose,
                 # not "force all joints to 2048".
                 sync_goals_to_current(bus, goals)
-                for mid in MOTOR_IDS:
-                    held_dir[mid] = 0
+                for motor_id in MOTOR_IDS:
+                    held_dir[motor_id] = 0
             elif key == "p":
                 print("\n", read_positions(bus))
             elif key in MOVE_KEYS:
-                mid, direction = MOVE_KEYS[key]
+                motor_id, direction = MOVE_KEYS[key]
                 # Immediate tap response.
-                goals[mid] = max(0, min(4095, goals[mid] + direction * tap_step))
+                goals[motor_id] = max(0, min(4095, goals[motor_id] + direction * tap_step))
                 if torque_on:
-                    bus.write_reg(mid, REG_GOAL_POSITION, goals[mid], 2)
+                    bus.write_reg(motor_id, REG_GOAL_POSITION, goals[motor_id], 2)
                 # Keep moving while key-repeat events continue.
-                held_dir[mid] = direction
-                held_until[mid] = now + hold_s
+                held_dir[motor_id] = direction
+                held_until[motor_id] = now + hold_s
 
             # Velocity loop while a key is held.
             if now - last_control >= control_period:
-                for mid in MOTOR_IDS:
-                    if held_until[mid] >= now and held_dir[mid] != 0:
-                        goals[mid] = max(0, min(4095, goals[mid] + held_dir[mid] * vel_step))
+                for motor_id in MOTOR_IDS:
+                    if held_until[motor_id] >= now and held_dir[motor_id] != 0:
+                        goals[motor_id] = max(0, min(4095, goals[motor_id] + held_dir[motor_id] * vel_step))
                         if torque_on:
-                            bus.write_reg(mid, REG_GOAL_POSITION, goals[mid], 2)
+                            bus.write_reg(motor_id, REG_GOAL_POSITION, goals[motor_id], 2)
                     else:
-                        held_dir[mid] = 0
+                        held_dir[motor_id] = 0
                 last_control = now
 
             if now - last_ui >= ui_period:
@@ -167,9 +167,9 @@ def main():
                 print("q/a pan  w/s lift  e/d elbow  r/f wrist_flex  t/g wrist_roll  y/h gripper")
                 print("-/= step down/up  space torque  z hold-current  p print positions")
                 print(f"velocity: control_hz={control_hz:.0f}  tap_step={tap_step}  vel_step={vel_step}\n")
-                for i, mid in enumerate(MOTOR_IDS):
-                    cur = pos.get(mid, goals[mid])
-                    print(f"[{mid}] {NAMES[i]:<14} pos={cur:>4}  goal={goals[mid]:>4}")
+                for i, motor_id in enumerate(MOTOR_IDS):
+                    cur = pos.get(motor_id, goals[motor_id])
+                    print(f"[{motor_id}] {NAMES[i]:<14} pos={cur:>4}  goal={goals[motor_id]:>4}")
                 last_ui = now
 
             time.sleep(0.002)

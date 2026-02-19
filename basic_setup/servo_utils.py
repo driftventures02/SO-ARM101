@@ -92,8 +92,8 @@ class ServoBus:
     def set_torque_all(self, motor_ids: list[int], enabled: bool):
         # Torque ON = motor actively holds position. OFF = motor moves freely by hand.
         val = 1 if enabled else 0
-        for mid in motor_ids:
-            self.write_reg(mid, REG_TORQUE_ENABLE, val, 1)
+        for motor_id in motor_ids:
+            self.write_reg(motor_id, REG_TORQUE_ENABLE, val, 1)
             time.sleep(0.002)
 
     def sync_read(self, motor_ids: list[int], addr: int, nbytes: int):

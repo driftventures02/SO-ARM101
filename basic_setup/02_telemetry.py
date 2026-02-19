@@ -60,11 +60,11 @@ def main():
             print(" joint            id   pos   deg   speed   load%   volt   temp")
             print(" ---------------------------------------------------------------")
 
-            for mid in MOTOR_IDS:
-                pkt = packets.get(mid)
+            for motor_id in MOTOR_IDS:
+                pkt = packets.get(motor_id)
                 if not pkt or len(pkt["params"]) < 8:
                     # No reply: usually wiring, power, or ID mismatch.
-                    print(f" {NAMES[mid]:<15} {mid:>2}   ---   ---    ---    ---    ---    ---")
+                    print(f" {NAMES[motor_id]:<15} {motor_id:>2}   ---   ---    ---    ---    ---    ---")
                     continue
                 p = pkt["params"]
                 pos = to_u16(p[0], p[1])
@@ -73,7 +73,7 @@ def main():
                 volt = p[6] / 10.0
                 temp = p[7]
                 deg = pos / 4096.0 * 360.0
-                print(f" {NAMES[mid]:<15} {mid:>2}  {pos:>4}  {deg:>5.1f}  {speed:>6}  {load:>6.1f}  {volt:>5.1f}V  {temp:>4}C")
+                print(f" {NAMES[motor_id]:<15} {motor_id:>2}  {pos:>4}  {deg:>5.1f}  {speed:>6}  {load:>6.1f}  {volt:>5.1f}V  {temp:>4}C")
 
             dt = time.time() - t0
             if dt < period:

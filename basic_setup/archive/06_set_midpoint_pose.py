@@ -92,7 +92,7 @@ def main():
             motor_ids.append(int(token))
         except ValueError:
             pass
-    motor_ids = [mid for mid in motor_ids if 1 <= mid <= 253]
+    motor_ids = [motor_id for motor_id in motor_ids if 1 <= motor_id <= 253]
     if not motor_ids:
         print("No valid IDs provided.")
         return
@@ -102,13 +102,13 @@ def main():
 
     try:
         print("Current positions:")
-        for mid in motor_ids:
-            pos = read_pos(ser, mid)
-            name = JOINT_NAMES.get(mid, f"motor_{mid}")
+        for motor_id in motor_ids:
+            pos = read_pos(ser, motor_id)
+            name = JOINT_NAMES.get(motor_id, f"motor_{motor_id}")
             if pos is None:
-                print(f"  ID {mid:>3} ({name:<14})  no response")
+                print(f"  ID {motor_id:>3} ({name:<14})  no response")
             else:
-                print(f"  ID {mid:>3} ({name:<14})  pos={pos:>4} ({(pos/4096)*360:6.1f} deg)")
+                print(f"  ID {motor_id:>3} ({name:<14})  pos={pos:>4} ({(pos/4096)*360:6.1f} deg)")
 
         print("\nMove the arm to your desired neutral pose now.")
         print("- shoulder_pan centered")
@@ -116,22 +116,22 @@ def main():
         input("\nPress Enter to set THIS pose as midpoint (2048) for selected IDs...")
 
         print("\nApplying midpoint calibration...")
-        for mid in motor_ids:
-            ok = set_midpoint_here(ser, mid)
-            name = JOINT_NAMES.get(mid, f"motor_{mid}")
-            print(f"  ID {mid:>3} ({name:<14})  {'OK' if ok else 'FAILED'}")
+        for motor_id in motor_ids:
+            ok = set_midpoint_here(ser, motor_id)
+            name = JOINT_NAMES.get(motor_id, f"motor_{motor_id}")
+            print(f"  ID {motor_id:>3} ({name:<14})  {'OK' if ok else 'FAILED'}")
             time.sleep(0.08)
 
         time.sleep(0.3)
         print("\nVerification (should be near 2048):")
-        for mid in motor_ids:
-            pos = read_pos(ser, mid)
-            name = JOINT_NAMES.get(mid, f"motor_{mid}")
+        for motor_id in motor_ids:
+            pos = read_pos(ser, motor_id)
+            name = JOINT_NAMES.get(motor_id, f"motor_{motor_id}")
             if pos is None:
-                print(f"  ID {mid:>3} ({name:<14})  no response")
+                print(f"  ID {motor_id:>3} ({name:<14})  no response")
             else:
                 delta = pos - 2048
-                print(f"  ID {mid:>3} ({name:<14})  pos={pos:>4}  delta={delta:+5d}")
+                print(f"  ID {motor_id:>3} ({name:<14})  pos={pos:>4}  delta={delta:+5d}")
 
         print("\nDone. Next: run limit capture again if needed:")
         print(f"  uv run python basic_setup/05_capture_joint_limits.py --port {args.port}")

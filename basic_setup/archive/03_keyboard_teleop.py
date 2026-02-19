@@ -98,14 +98,14 @@ def parse_response(data):
 def read_positions(ser, motor_ids, verbose=False):
     """Read current position of all motors."""
     positions = {}
-    for mid in motor_ids:
-        pkt = build_packet(mid, INST_READ, [REG_PRESENT_POSITION, 2])
+    for motor_id in motor_ids:
+        pkt = build_packet(motor_id, INST_READ, [REG_PRESENT_POSITION, 2])
         resp = send_recv(ser, pkt, verbose=verbose)
         if resp:
             parsed = parse_response(resp)
             if parsed and len(parsed["params"]) >= 2:
                 pos = parsed["params"][0] | (parsed["params"][1] << 8)
-                positions[mid] = pos
+                positions[motor_id] = pos
     return positions
 
 
@@ -150,9 +150,9 @@ def set_torque(ser, motor_ids, enable, verbose=False):
     This is actually the "Torque Switch" register at address 40.
     Writing 1 enables, 0 disables.
     """
-    for mid in motor_ids:
+    for motor_id in motor_ids:
         value = 1 if enable else 0
-        pkt = build_packet(mid, INST_WRITE, [REG_TORQUE_ENABLE, value])
+        pkt = build_packet(motor_id, INST_WRITE, [REG_TORQUE_ENABLE, value])
         send_recv(ser, pkt, verbose=verbose)
 
 
@@ -162,9 +162,9 @@ def write_all_positions(ser, motor_ids, positions, verbose=False):
     (SYNC_WRITE would be more efficient but individual writes let us
     see each packet separately for learning purposes.)
     """
-    for mid in motor_ids:
-        if mid in positions:
-            write_position(ser, mid, positions[mid], verbose=verbose)
+    for motor_id in motor_ids:
+        if motor_id in positions:
+            write_position(ser, motor_id, positions[motor_id], verbose=verbose)
 
 
 def get_key():
@@ -236,9 +236,9 @@ def main():
         sys.exit(1)
     
     # Fill in any missing
-    for mid in motor_ids:
-        if mid not in goal_positions:
-            goal_positions[mid] = 2048
+    for motor_id in motor_ids:
+        if motor_id not in goal_positions:
+            goal_positions[motor_id] = 2048
     
     print(f"{GREEN}Connected! Found {len(goal_positions)} motors.{RESET}")
     
@@ -264,10 +264,10 @@ def main():
             print(f"{'='*75}{RESET}\n")
             
             # Joint display
-            for i, (mid, name) in enumerate(zip(motor_ids, JOINT_NAMES)):
+            for i, (motor_id, name) in enumerate(zip(motor_ids, JOINT_NAMES)):
                 is_sel = (i == selected_joint)
-                pos = current_positions.get(mid, goal_positions.get(mid, 2048))
-                goal = goal_positions.get(mid, 2048)
+                pos = current_positions.get(motor_id, goal_positions.get(motor_id, 2048))
+                goal = goal_positions.get(motor_id, 2048)
                 deg = (pos / 4096) * 360
                 
                 prefix = f"  {BOLD}{CYAN}▶ " if is_sel else f"  {DIM}  "
@@ -295,36 +295,36 @@ def main():
             if key is None:
                 continue
             
-            mid = motor_ids[selected_joint]
+            motor_id = motor_ids[selected_joint]
             
             if key == 'q':
                 break
             elif key in '123456':
                 selected_joint = int(key) - 1
             elif key in ('RIGHT', 'd', 'l'):
-                goal_positions[mid] = min(4095, goal_positions[mid] + step_size)
+                goal_positions[motor_id] = min(4095, goal_positions[motor_id] + step_size)
                 if torque_on:
-                    write_position(ser, mid, goal_positions[mid], verbose=verbose)
+                    write_position(ser, motor_id, goal_positions[motor_id], verbose=verbose)
             elif key in ('LEFT', 'a'):
-                goal_positions[mid] = max(0, goal_positions[mid] - step_size)
+                goal_positions[motor_id] = max(0, goal_positions[motor_id] - step_size)
                 if torque_on:
-                    write_position(ser, mid, goal_positions[mid], verbose=verbose)
+                    write_position(ser, motor_id, goal_positions[motor_id], verbose=verbose)
             elif key in ('UP', 'w', 'k'):
-                goal_positions[mid] = min(4095, goal_positions[mid] + step_size * 5)
+                goal_positions[motor_id] = min(4095, goal_positions[motor_id] + step_size * 5)
                 if torque_on:
-                    write_position(ser, mid, goal_positions[mid], verbose=verbose)
+                    write_position(ser, motor_id, goal_positions[motor_id], verbose=verbose)
             elif key in ('DOWN', 's', 'j'):
-                goal_positions[mid] = max(0, goal_positions[mid] - step_size * 5)
+                goal_positions[motor_id] = max(0, goal_positions[motor_id] - step_size * 5)
                 if torque_on:
-                    write_position(ser, mid, goal_positions[mid], verbose=verbose)
+                    write_position(ser, motor_id, goal_positions[motor_id], verbose=verbose)
             elif key == '[':
                 step_size = max(1, step_size // 2)
             elif key == ']':
                 step_size = min(500, step_size * 2)
             elif key == 'h':
                 # Home all joints
-                for mid in motor_ids:
-                    goal_positions[mid] = 2048
+                for motor_id in motor_ids:
+                    goal_positions[motor_id] = 2048
                 if torque_on:
                     write_all_positions(ser, motor_ids, goal_positions, verbose=verbose)
             elif key == ' ':
@@ -333,9 +333,9 @@ def main():
                 if torque_on:
                     # Re-read positions so goals match current physical state
                     goal_positions = read_positions(ser, motor_ids, verbose=verbose)
-                    for mid in motor_ids:
-                        if mid not in goal_positions:
-                            goal_positions[mid] = 2048
+                    for motor_id in motor_ids:
+                        if motor_id not in goal_positions:
+                            goal_positions[motor_id] = 2048
             elif key == 'p':
                 # Print positions as Python dict
                 pos_dict = {JOINT_NAMES[i]: current_positions.get(motor_ids[i], 0) 

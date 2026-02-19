@@ -26,7 +26,7 @@ Every packet sent/received is visible so you can see the actual protocol.
 pip install pyserial
 ```
 
-That's it. One dependency.
+Only one dependency.
 
 ## The Order
 
@@ -102,6 +102,8 @@ After you've done all of the above and understand the raw protocol:
 3. **MuJoCo simulation** — load the URDF, simulate the arm, test control before running on hardware
 4. **LLM-driven control** — LLM outputs target (x,y,z) → IK solves joint angles → servo commands
 5. **Visual servoing** — camera feedback loop for closed-loop control
+
+6. **LAP, asyncVLA** - experimenting with cutting edge techniques to improve generalizability and recovery
 
 ## Protocol Quick Reference
 

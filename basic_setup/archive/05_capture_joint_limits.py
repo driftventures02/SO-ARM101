@@ -64,8 +64,8 @@ def read_position(ser: serial.Serial, motor_id: int) -> int | None:
 
 def set_torque_all(ser: serial.Serial, enable: bool):
     value = 1 if enable else 0
-    for mid in MOTOR_IDS:
-        pkt = build_packet(mid, INST_WRITE, [REG_TORQUE_ENABLE, value])
+    for motor_id in MOTOR_IDS:
+        pkt = build_packet(motor_id, INST_WRITE, [REG_TORQUE_ENABLE, value])
         send_recv(ser, pkt, timeout=0.01)
 
 
@@ -89,11 +89,11 @@ def main():
         print("\nCapture each joint carefully. Stay away from hard stops.")
         print(f"Measured limits will be tightened by margin={args.margin} ticks.\n")
 
-        for mid, name in zip(MOTOR_IDS, JOINT_NAMES):
-            input(f"[{mid}] {name}: move to MIN safe position, then press Enter...")
-            pmin = read_position(ser, mid)
-            input(f"[{mid}] {name}: move to MAX safe position, then press Enter...")
-            pmax = read_position(ser, mid)
+        for motor_id, name in zip(MOTOR_IDS, JOINT_NAMES):
+            input(f"[{motor_id}] {name}: move to MIN safe position, then press Enter...")
+            pmin = read_position(ser, motor_id)
+            input(f"[{motor_id}] {name}: move to MAX safe position, then press Enter...")
+            pmax = read_position(ser, motor_id)
 
             if pmin is None or pmax is None:
                 print(f"  Warning: could not read {name}, using full range.")
@@ -105,7 +105,7 @@ def main():
             if lo >= hi:
                 lo, hi = 0, 4095
 
-            limits[name] = {"id": mid, "min": lo, "max": hi}
+            limits[name] = {"id": motor_id, "min": lo, "max": hi}
             print(f"  saved {name}: min={lo}, max={hi}\n")
 
         out_path = Path(args.out)

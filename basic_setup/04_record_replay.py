@@ -70,13 +70,13 @@ def parse_response(data):
 
 def read_positions(ser, motor_ids):
     positions = {}
-    for mid in motor_ids:
-        pkt = build_packet(mid, INST_READ, [REG_PRESENT_POSITION, 2])
+    for motor_id in motor_ids:
+        pkt = build_packet(motor_id, INST_READ, [REG_PRESENT_POSITION, 2])
         resp = send_recv(ser, pkt)
         if resp:
             p = parse_response(resp)
             if p and len(p["params"]) >= 2:
-                positions[mid] = p["params"][0] | (p["params"][1] << 8)
+                positions[motor_id] = p["params"][0] | (p["params"][1] << 8)
     return positions
 
 
@@ -89,8 +89,8 @@ def write_position(ser, motor_id, position):
 
 
 def set_torque(ser, motor_ids, enable):
-    for mid in motor_ids:
-        pkt = build_packet(mid, INST_WRITE, [REG_TORQUE_ENABLE, 1 if enable else 0])
+    for motor_id in motor_ids:
+        pkt = build_packet(motor_id, INST_WRITE, [REG_TORQUE_ENABLE, 1 if enable else 0])
         send_recv(ser, pkt)
 
 
@@ -197,12 +197,12 @@ def replay_trajectory(ser, motor_ids, trajectory, speed=1.0):
     steps = 50
     for s in range(steps):
         alpha = (s + 1) / steps
-        for i, mid in enumerate(motor_ids):
+        for i, motor_id in enumerate(motor_ids):
             name = JOINT_NAMES[i]
-            cur = current.get(mid, 2048)
+            cur = current.get(motor_id, 2048)
             target = start_positions.get(name, 2048)
             interp = int(cur + alpha * (target - cur))
-            write_position(ser, mid, interp)
+            write_position(ser, motor_id, interp)
         time.sleep(0.02)
     
     time.sleep(0.5)
@@ -225,10 +225,10 @@ def replay_trajectory(ser, motor_ids, trajectory, speed=1.0):
             wp = trajectory[frame_idx]
             
             # Write positions
-            for i, mid in enumerate(motor_ids):
+            for i, motor_id in enumerate(motor_ids):
                 name = JOINT_NAMES[i]
                 if name in wp["positions"]:
-                    write_position(ser, mid, wp["positions"][name])
+                    write_position(ser, motor_id, wp["positions"][name])
             
             # Display
             pos_str = "  ".join(f"{JOINT_NAMES[i][:4]}={wp['positions'].get(JOINT_NAMES[i], 0):>5}"
