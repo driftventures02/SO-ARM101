@@ -74,6 +74,8 @@ Press `v` for verbose mode to see every packet.
 python 03_easy_keyboard_teleop.py --port /dev/tty.usbmodemXXXXX
 ```
 Direct fixed keys per joint. No limits layer; minimal code path.
+For smoother motion, set servo acceleration in teleop:
+`python 03_easy_keyboard_teleop.py --port /dev/tty.usbmodemXXXXX --accel 20`
 
 ### Optional calibration tools
 ```bash
