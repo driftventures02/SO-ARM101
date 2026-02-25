@@ -161,9 +161,19 @@ class IKSolver:
         return result
 
     def _clamp_angles(self, angles: list[float]) -> list[float]:
-        """Round-trip through ticks to enforce joint limits."""
+        """Round-trip through ticks to enforce joint limits.
+        
+        Unwraps angles afterward so they stay close to the input
+        (avoids 360° jumps that confuse the solver near wrap boundaries).
+        """
         ticks = self._angles_to_ticks(angles)
-        return self._ticks_to_angles(ticks)
+        clamped = self._ticks_to_angles(ticks)
+        for j in range(4):
+            while clamped[j] - angles[j] > math.pi:
+                clamped[j] -= 2 * math.pi
+            while clamped[j] - angles[j] < -math.pi:
+                clamped[j] += 2 * math.pi
+        return clamped
 
     def _solve_from_seed(
         self,
@@ -335,12 +345,22 @@ def main():
             t = step / args.steps
             for mid in (1, 2, 3, 4):
                 s = current[mid]
-                diff = goal[mid] - s
-                # Short path for wrapping joints.
-                _, _, wraps = JOINT_LIMITS.get(mid, (0, 4095, False))
-                if wraps:
-                    if diff > 2048: diff -= 4096
-                    elif diff < -2048: diff += 4096
+                g = goal[mid]
+                lo, hi, wraps = JOINT_LIMITS.get(mid, (0, 4095, False))
+                diff = g - s
+                if wraps and lo > hi:
+                    # Safe zone: [lo..4095] ∪ [0..hi]. Gap: [hi+1..lo-1].
+                    # Pick the direction that avoids the gap.
+                    d_pos = (g - s) % 4096            # positive direction
+                    d_neg = d_pos - 4096               # negative direction
+                    gap_mid = (hi + 1 + lo - 1) // 2   # center of forbidden zone
+                    # If going positive would cross the gap midpoint, go negative.
+                    if d_pos == 0:
+                        diff = 0
+                    elif (gap_mid - s) % 4096 <= d_pos:
+                        diff = d_neg
+                    else:
+                        diff = d_pos
                 pos = int(s + diff * t) % 4096
                 bus.write_reg(mid, REG_GOAL_POSITION, pos, 2)
             time.sleep(dt)
