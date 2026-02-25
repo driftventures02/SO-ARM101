@@ -24,11 +24,8 @@ from servo_utils import (
     REG_PRESENT_POSITION,
     to_u16,
 )
-from kinematics.so_arm101_fk import (
-    JointCalibration,
-    SoArm101Geometry,
-    fk_from_ticks_m,
-)
+from kinematics.forward_kin import SoArm101Geometry, fk_from_ticks_m
+from kinematics.motion import JointCalibration
 
 MOTOR_IDS = [1, 2, 3, 4, 5, 6]
 NAMES = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper"]

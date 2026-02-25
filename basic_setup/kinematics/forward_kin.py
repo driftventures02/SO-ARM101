@@ -18,9 +18,11 @@ from dataclasses import dataclass
 from pathlib import Path
 import math
 
-
-TICKS_PER_REV = 4096.0
-DEFAULT_CENTER_TICK = 2048.0
+from kinematics.motion import (
+    JointCalibration,
+    tick_to_rad,
+    ticks_to_rads,
+)
 
 
 @dataclass
@@ -45,31 +47,6 @@ class SoArm101Geometry:
     elbow_to_wrist_m: float = 0.140       # lower arm
     wrist_to_tool_m: float = 0.090        # wrist flex → wrist roll
     tool_tip_m: float = 0.080             # wrist roll → gripper tip
-
-
-@dataclass
-class JointCalibration:
-    """Per-joint tick->radian mapping settings.
-
-    center_tick = the servo position when the arm is fully straight out.
-    This is angle=0 for FK. Measured by putting the arm straight and reading ticks.
-    These are NOT midpoints of the range — servos are mounted at different orientations.
-    """
-
-    center_tick_pan: float = 1977          # arm pointing forward
-    center_tick_shoulder: float = 2774     # arm horizontal
-    center_tick_elbow: float = 397         # arm straight (servo mounted sideways)
-    center_tick_wrist_flex: float = 3082   # wrist straight (wraps near 4095)
-    invert_pan: bool = False
-    invert_shoulder: bool = False
-    invert_elbow: bool = False
-    invert_wrist_flex: bool = False
-
-
-def tick_to_rad(tick: int | float, center_tick: float, invert: bool = False) -> float:
-    """Convert raw servo tick to radians around a configurable center."""
-    angle = ((float(tick) - center_tick) / TICKS_PER_REV) * (2.0 * math.pi)
-    return -angle if invert else angle
 
 
 def fk_xyz_m(
@@ -109,28 +86,16 @@ def fk_xyz_m(
     y = -r * math.sin(q1)
     return x, y, z
 
-
 def fk_from_ticks_m(
     positions_by_id: dict[int, int],
     geometry: SoArm101Geometry,
     calibration: JointCalibration | None = None,
 ) -> tuple[float, float, float] | None:
-    """
-    Compute FK directly from present position ticks.
-
-    Expected IDs:
-      1=pan, 2=shoulder_lift, 3=elbow_flex, 4=wrist_flex
-    """
-    calibration = calibration or JointCalibration()
-    required = (1, 2, 3, 4)
-    if any(motor_id not in positions_by_id for motor_id in required):
+    """Compute FK directly from tick dict {motor_id: tick} → (x, y, z) meters."""
+    if any(mid not in positions_by_id for mid in (1, 2, 3, 4)):
         return None
-
-    pan = tick_to_rad(positions_by_id[1], calibration.center_tick_pan, calibration.invert_pan)
-    shoulder = tick_to_rad(positions_by_id[2], calibration.center_tick_shoulder, calibration.invert_shoulder)
-    elbow = tick_to_rad(positions_by_id[3], calibration.center_tick_elbow, calibration.invert_elbow)
-    wrist_flex = tick_to_rad(positions_by_id[4], calibration.center_tick_wrist_flex, calibration.invert_wrist_flex)
-    return fk_xyz_m(pan, shoulder, elbow, wrist_flex, geometry)
+    rads = ticks_to_rads(positions_by_id, calibration)
+    return fk_xyz_m(*rads, geometry)
 
 
 # ── CLI diagnostic ───────────────────────────────────────────────────
@@ -140,13 +105,13 @@ def main():
 
     Usage:
         # Live from hardware:
-        uv run python basic_setup/kinematics/so_arm101_fk.py --port /dev/cu.usbmodemXXXXX
+        uv run python basic_setup/kinematics/forward_kin.py --port /dev/cu.usbmodemXXXXX
 
         # Manual tick values (no hardware needed):
-        uv run python basic_setup/kinematics/so_arm101_fk.py --ticks 2048 2048 2048 2048
+        uv run python basic_setup/kinematics/forward_kin.py --ticks 2048 2048 2048 2048
 
         # Sweep one joint to see how FK responds:
-        uv run python basic_setup/kinematics/so_arm101_fk.py --sweep
+        uv run python basic_setup/kinematics/forward_kin.py --sweep
     """
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 

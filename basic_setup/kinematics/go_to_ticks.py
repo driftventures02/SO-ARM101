@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Move from current position to target ticks with linear interpolation."""
+"""Move from current position to target ticks with safe interpolation."""
 
 import argparse
 import sys
@@ -8,25 +8,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from servo_utils import (
-    ServoBus,
-    REG_ACCELERATION,
-    REG_GOAL_POSITION,
-    REG_PRESENT_POSITION,
-    REG_TORQUE_ENABLE,
-    to_u16,
-)
-
-MOTOR_IDS = [1, 2, 3, 4, 5, 6]
-
-
-def read_positions(bus: ServoBus) -> dict[int, int]:
-    out = {}
-    for motor_id in MOTOR_IDS:
-        p = bus.read_reg(motor_id, REG_PRESENT_POSITION, 2)
-        if p and len(p) >= 2:
-            out[motor_id] = to_u16(p[0], p[1])
-    return out
+from servo_utils import ServoBus
+from kinematics.motion import read_positions, torque_on, torque_off, move
 
 
 def main():
@@ -43,60 +26,25 @@ def main():
     time.sleep(0.2)
 
     try:
-        # Try reading twice — first read can fail after fresh connect.
         cur = read_positions(bus)
-        if not cur:
-            time.sleep(0.1)
-            cur = read_positions(bus)
         if not cur:
             print("ERROR: Can't read any motors. Check port/connection.")
             return
         print(f"Current: {cur}")
         print(f"Target:  {target}")
 
-        # Set acceleration for smooth ramp (0=instant, higher=smoother).
-        for mid in MOTOR_IDS:
-            bus.write_reg(mid, REG_ACCELERATION, 20, 1)
-        time.sleep(0.02)
+        torque_on(bus, cur)
+        move(bus, cur, target, steps=args.steps, duration=args.duration)
 
-        # Sync goals then enable torque.
-        for mid in MOTOR_IDS:
-            bus.write_reg(mid, REG_GOAL_POSITION, cur.get(mid, 2048), 2)
-        time.sleep(0.05)
-        for mid in MOTOR_IDS:
-            bus.write_reg(mid, REG_TORQUE_ENABLE, 1, 1)
-        time.sleep(0.05)
-
-        # Interpolate to target.
-        dt = args.duration / args.steps
-        for step in range(1, args.steps + 1):
-            t = step / args.steps
-            for mid in (1, 2, 3, 4):
-                s = cur.get(mid, 2048)
-                pos = int(s + (target[mid] - s) * t) % 4096
-                bus.write_reg(mid, REG_GOAL_POSITION, pos, 2)
-            time.sleep(dt)
-
-        print(f"Done. Press Enter to return and release torque.")
+        print("Done. Press Enter to return and release torque.")
         input()
 
-        # Return to original.
+        # Return to original position.
         now = read_positions(bus)
-        for step in range(1, args.steps + 1):
-            t = step / args.steps
-            for mid in (1, 2, 3, 4):
-                s = now.get(mid, 2048)
-                orig = cur.get(mid, 2048)
-                pos = int(s + (orig - s) * t) % 4096
-                bus.write_reg(mid, REG_GOAL_POSITION, pos, 2)
-            time.sleep(dt)
+        move(bus, now, cur, steps=args.steps, duration=args.duration)
+
     finally:
-        # Retry torque off twice with delays to make sure it sticks.
-        for _ in range(2):
-            for mid in MOTOR_IDS:
-                bus.write_reg(mid, REG_TORQUE_ENABLE, 0, 1)
-                time.sleep(0.02)
-            time.sleep(0.1)
+        torque_off(bus)
         print("Torque OFF.")
         bus.close()
 
