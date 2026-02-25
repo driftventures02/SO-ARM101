@@ -4,4 +4,8 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
     "pyserial>=3.5",
+    "openai>=1.30",
+    "opencv-python>=4.9",
+    "python-dotenv>=1.0",
+    "scipy>=1.12",
 ]
