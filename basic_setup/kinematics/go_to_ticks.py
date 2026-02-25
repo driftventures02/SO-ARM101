@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from servo_utils import (
     ServoBus,
+    REG_ACCELERATION,
     REG_GOAL_POSITION,
     REG_PRESENT_POSITION,
     REG_TORQUE_ENABLE,
@@ -33,7 +34,7 @@ def main():
     parser.add_argument("--port", required=True)
     parser.add_argument("--target", nargs=4, type=int, required=True,
                         metavar=("PAN", "SHOULDER", "ELBOW", "WRIST"))
-    parser.add_argument("--steps", type=int, default=50)
+    parser.add_argument("--steps", type=int, default=100)
     parser.add_argument("--duration", type=float, default=2.0)
     args = parser.parse_args()
 
@@ -52,6 +53,11 @@ def main():
             return
         print(f"Current: {cur}")
         print(f"Target:  {target}")
+
+        # Set acceleration for smooth ramp (0=instant, higher=smoother).
+        for mid in MOTOR_IDS:
+            bus.write_reg(mid, REG_ACCELERATION, 20, 1)
+        time.sleep(0.02)
 
         # Sync goals then enable torque.
         for mid in MOTOR_IDS:
@@ -85,8 +91,12 @@ def main():
                 bus.write_reg(mid, REG_GOAL_POSITION, pos, 2)
             time.sleep(dt)
     finally:
-        for mid in MOTOR_IDS:
-            bus.write_reg(mid, REG_TORQUE_ENABLE, 0, 1)
+        # Retry torque off twice with delays to make sure it sticks.
+        for _ in range(2):
+            for mid in MOTOR_IDS:
+                bus.write_reg(mid, REG_TORQUE_ENABLE, 0, 1)
+                time.sleep(0.02)
+            time.sleep(0.1)
         print("Torque OFF.")
         bus.close()
 
