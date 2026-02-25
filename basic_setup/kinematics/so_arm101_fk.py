@@ -39,7 +39,7 @@ class SoArm101Geometry:
       Total reach:               550 mm
     """
 
-    pan_to_shoulder_m: float = 0.050      # horizontal offset from pan axis to shoulder link
+    pan_to_shoulder_m: float = -0.050     # shoulder is 50mm in the arm's forward direction
     base_height_m: float = 0.120          # table to shoulder rotation axis
     shoulder_to_elbow_m: float = 0.120    # upper arm
     elbow_to_wrist_m: float = 0.140       # lower arm
@@ -67,17 +67,8 @@ class JointCalibration:
 
 
 def tick_to_rad(tick: int | float, center_tick: float, invert: bool = False) -> float:
-    """Convert raw servo tick to radians around a configurable center.
-
-    Handles wrap-around: if the tick crosses the 4095→0 boundary,
-    the shortest path is used (e.g. 3082→72 = +1086 ticks, not -3010).
-    """
-    diff = float(tick) - center_tick
-    if diff > 2048:
-        diff -= 4096
-    elif diff < -2048:
-        diff += 4096
-    angle = (diff / TICKS_PER_REV) * (2.0 * math.pi)
+    """Convert raw servo tick to radians around a configurable center."""
+    angle = ((float(tick) - center_tick) / TICKS_PER_REV) * (2.0 * math.pi)
     return -angle if invert else angle
 
 
@@ -112,8 +103,10 @@ def fk_xyz_m(
     z = (geometry.base_height_m
          + l1 * math.sin(q2) + l2 * math.sin(q23) + l3 * math.sin(q234))
 
-    x = r * math.cos(q1)
-    y = r * math.sin(q1)
+    # The arm reaches in the -r direction in the trig frame,
+    # so negate to make forward = +x.
+    x = -r * math.cos(q1)
+    y = -r * math.sin(q1)
     return x, y, z
 
 
