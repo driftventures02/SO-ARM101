@@ -24,6 +24,11 @@ from servo_utils import (
     REG_PRESENT_POSITION,
     to_u16,
 )
+from kinematics.so_arm101_fk import (
+    JointCalibration,
+    SoArm101Geometry,
+    fk_from_ticks_m,
+)
 
 MOTOR_IDS = [1, 2, 3, 4, 5, 6]
 NAMES = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper"]
@@ -79,6 +84,7 @@ def main():
     parser.add_argument("--accel", type=int, default=20, help="Servo acceleration register (0..255). Higher is smoother.")
     parser.add_argument("--control-hz", type=float, default=60.0, help="Velocity update rate while key is held")
     parser.add_argument("--hold-ms", type=float, default=120.0, help="How long to treat a key as held after last repeat event")
+    parser.add_argument("--show-fk", action="store_true", help="Show live end-effector XYZ using FK model")
     args = parser.parse_args()
 
     # Open serial connection to the servo bus adapter.
@@ -90,6 +96,8 @@ def main():
     control_hz = max(10.0, args.control_hz)
     control_period = 1.0 / control_hz
     hold_s = max(0.02, args.hold_ms / 1000.0)
+    geometry = SoArm101Geometry()  # real SO-ARM101 dimensions baked in
+    calibration = JointCalibration()
     torque_on = True
     # Start by setting safe goals first, then enable torque.
     goals = read_positions(bus)
@@ -167,6 +175,14 @@ def main():
                 print("q/a pan  w/s lift  e/d elbow  r/f wrist_flex  t/g wrist_roll  y/h gripper")
                 print("-/= step down/up  space torque  z hold-current  p print positions")
                 print(f"velocity: control_hz={control_hz:.0f}  tap_step={tap_step}  vel_step={vel_step}\n")
+                if args.show_fk:
+                    xyz = fk_from_ticks_m(pos, geometry=geometry, calibration=calibration)
+                    if xyz is None:
+                        print("fk: waiting for IDs 1..4 telemetry")
+                    else:
+                        x, y, z = xyz
+                        print(f"fk_xyz(m): x={x:+.3f}  y={y:+.3f}  z={z:+.3f}")
+                    print("")
                 for i, motor_id in enumerate(MOTOR_IDS):
                     cur = pos.get(motor_id, goals[motor_id])
                     print(f"[{motor_id}] {NAMES[i]:<14} pos={cur:>4}  goal={goals[motor_id]:>4}")

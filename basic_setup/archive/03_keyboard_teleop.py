@@ -167,6 +167,18 @@ def write_all_positions(ser, motor_ids, positions, verbose=False):
             write_position(ser, motor_id, positions[motor_id], verbose=verbose)
 
 
+def sync_goals_to_current(ser, motor_ids, goal_positions, verbose=False):
+    """
+    Read current positions and write them as goals before torque-on.
+    This prevents a jump toward stale goal registers.
+    """
+    current = read_positions(ser, motor_ids, verbose=verbose)
+    for motor_id in motor_ids:
+        cur = current.get(motor_id, goal_positions.get(motor_id, 2048))
+        goal_positions[motor_id] = cur
+        write_position(ser, motor_id, cur, verbose=verbose)
+
+
 def get_key():
     """Non-blocking key read on Mac/Linux using raw terminal mode."""
     fd = sys.stdin.fileno()
@@ -247,7 +259,8 @@ def main():
     torque_on = True
     verbose = False
     
-    # Enable torque
+    # Set safe goals first, then enable torque to avoid startup jump.
+    sync_goals_to_current(ser, motor_ids, goal_positions, verbose=verbose)
     set_torque(ser, motor_ids, True, verbose=verbose)
     
     try:
@@ -329,13 +342,10 @@ def main():
                     write_all_positions(ser, motor_ids, goal_positions, verbose=verbose)
             elif key == ' ':
                 torque_on = not torque_on
-                set_torque(ser, motor_ids, torque_on, verbose=verbose)
                 if torque_on:
-                    # Re-read positions so goals match current physical state
-                    goal_positions = read_positions(ser, motor_ids, verbose=verbose)
-                    for motor_id in motor_ids:
-                        if motor_id not in goal_positions:
-                            goal_positions[motor_id] = 2048
+                    # Write present pose as goal before re-enabling torque.
+                    sync_goals_to_current(ser, motor_ids, goal_positions, verbose=verbose)
+                set_torque(ser, motor_ids, torque_on, verbose=verbose)
             elif key == 'p':
                 # Print positions as Python dict
                 pos_dict = {JOINT_NAMES[i]: current_positions.get(motor_ids[i], 0) 
