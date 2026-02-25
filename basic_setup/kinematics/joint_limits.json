@@ -17,8 +17,9 @@
     },
     "wrist_flex": {
       "id": 4,
-      "min": 58,
-      "max": 1940
+      "min": 1940,
+      "max": 58,
+      "wraps": true
     },
     "wrist_roll": {
       "id": 5,

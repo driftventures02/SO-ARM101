@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """
+this doesnt work right now because our fk is off still
 Numerical inverse kinematics for SO-ARM101 with joint-limit safety.
 
 Approach:
