@@ -168,14 +168,17 @@ def read_positions(bus, motor_ids: list[int] | None = None) -> dict[int, int]:
 
 
 def torque_on(bus, current: dict[int, int], motor_ids: list[int] | None = None):
-    """Sync goal positions to current, set acceleration, then enable torque."""
+    """Sync goal positions to current, set acceleration, then enable torque.
+
+    Only touches motors present in `current` — never guesses a position.
+    """
     su = _servo()
-    ids = motor_ids or MOTOR_IDS
+    ids = [mid for mid in (motor_ids or MOTOR_IDS) if mid in current]
     for mid in ids:
         bus.write_reg(mid, su.REG_ACCELERATION, 20, 1)
     time.sleep(0.02)
     for mid in ids:
-        bus.write_reg(mid, su.REG_GOAL_POSITION, current.get(mid, 2048), 2)
+        bus.write_reg(mid, su.REG_GOAL_POSITION, clamp_tick(mid, current[mid]), 2)
     time.sleep(0.05)
     for mid in ids:
         bus.write_reg(mid, su.REG_TORQUE_ENABLE, 1, 1)
@@ -206,18 +209,16 @@ def move(
     Only moves the joints specified in `goal`. Other motors are untouched.
     """
     su = _servo()
-    ids = motor_ids or list(goal.keys())
-    diffs = {}
-    for mid in ids:
-        s = start.get(mid, 2048)
-        g = goal.get(mid, s)
-        diffs[mid] = safe_interpolation_diff(s, g, mid)
+    ids = [mid for mid in (motor_ids or list(goal.keys())) if mid in start]
+    # Clamp start and goal to safe ranges before computing anything.
+    starts = {mid: clamp_tick(mid, start[mid]) for mid in ids}
+    goals = {mid: clamp_tick(mid, goal.get(mid, starts[mid])) for mid in ids}
+    diffs = {mid: safe_interpolation_diff(starts[mid], goals[mid], mid) for mid in ids}
 
     dt = duration / steps
     for step in range(1, steps + 1):
         t = step / steps
         for mid in ids:
-            s = start.get(mid, 2048)
-            pos = int(s + diffs[mid] * t) % 4096
+            pos = clamp_tick(mid, int(starts[mid] + diffs[mid] * t))
             bus.write_reg(mid, su.REG_GOAL_POSITION, pos, 2)
         time.sleep(dt)

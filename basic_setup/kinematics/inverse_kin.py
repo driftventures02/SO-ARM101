@@ -143,15 +143,15 @@ class IKSolver:
         seed0 = ticks_to_rads(current_ticks, cal)
 
         def _mid_tick(mid):
-            lo, hi, wraps = JOINT_LIMITS.get(mid, (0, 4095, False))
-            return lo if wraps else (lo + hi) // 2
+            lo, hi, _ = JOINT_LIMITS.get(mid, (0, 4095, False))
+            return (lo + hi) // 2
 
         seeds = [seed0, ticks_to_rads({m: _mid_tick(m) for m in (1, 2, 3, 4)}, cal)]
         for frac in (0.25, 0.75):
             seed_ticks = {}
             for mid in (1, 2, 3, 4):
-                lo, hi, wraps = JOINT_LIMITS.get(mid, (0, 4095, False))
-                seed_ticks[mid] = lo if wraps else int(lo + (hi - lo) * frac)
+                lo, hi, _ = JOINT_LIMITS.get(mid, (0, 4095, False))
+                seed_ticks[mid] = int(lo + (hi - lo) * frac)
             seeds.append(ticks_to_rads(seed_ticks, cal))
 
         best, best_dist = None, float("inf")

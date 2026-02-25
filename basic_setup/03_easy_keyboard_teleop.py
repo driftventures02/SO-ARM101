@@ -68,7 +68,9 @@ def sync_goals_to_current(bus: ServoBus, goals: dict[int, int]):
     """Read current position and write it as goal so torque-on does not jump."""
     pos = read_positions(bus)
     for motor_id in MOTOR_IDS:
-        cur = pos.get(motor_id, goals.get(motor_id, 2048))
+        cur = pos.get(motor_id) or goals.get(motor_id)
+        if cur is None:
+            continue
         goals[motor_id] = cur
         bus.write_reg(motor_id, REG_GOAL_POSITION, cur, 2)
 
@@ -98,8 +100,6 @@ def main():
     torque_on = True
     # Start by setting safe goals first, then enable torque.
     goals = read_positions(bus)
-    for motor_id in MOTOR_IDS:
-        goals.setdefault(motor_id, 2048)
     # Hardware-side smoothing: non-zero acceleration softens start/stop.
     for motor_id in MOTOR_IDS:
         bus.write_reg(motor_id, REG_ACCELERATION, accel, 1)

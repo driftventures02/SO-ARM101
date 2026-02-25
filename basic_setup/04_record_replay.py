@@ -133,8 +133,8 @@ def record_trajectory(ser, motor_ids, hz=20):
             waypoint = {
                 "timestamp": round(timestamp, 4),
                 "frame": frame,
-                "positions": {JOINT_NAMES[i]: positions.get(motor_ids[i], 2048)
-                             for i in range(6)},
+                "positions": {JOINT_NAMES[i]: positions[motor_ids[i]]
+                             for i in range(6) if motor_ids[i] in positions},
             }
             trajectory.append(waypoint)
             frame += 1
@@ -199,8 +199,10 @@ def replay_trajectory(ser, motor_ids, trajectory, speed=1.0):
         alpha = (s + 1) / steps
         for i, motor_id in enumerate(motor_ids):
             name = JOINT_NAMES[i]
-            cur = current.get(motor_id, 2048)
-            target = start_positions.get(name, 2048)
+            if motor_id not in current or name not in start_positions:
+                continue
+            cur = current[motor_id]
+            target = start_positions[name]
             interp = int(cur + alpha * (target - cur))
             write_position(ser, motor_id, interp)
         time.sleep(0.02)

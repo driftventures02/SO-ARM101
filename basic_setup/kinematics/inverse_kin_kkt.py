@@ -25,7 +25,6 @@ from kinematics.forward_kin import SoArm101Geometry, fk_xyz_m, fk_from_ticks_m
 from kinematics.motion import (
     JointCalibration,
     JOINT_LIMITS,
-    TICKS_PER_REV,
     _cal_params,
     tick_to_rad,
     ticks_to_rads,
@@ -40,31 +39,15 @@ from kinematics.motion import (
 # ── Radian bounds from tick limits ────────────────────────────────────
 
 def _rad_bounds(cal: JointCalibration | None = None) -> list[tuple[float, float]]:
-    """Compute (lo_rad, hi_rad) bounds for each FK joint.
-
-    For wrapping joints (safe zone crosses 4095→0), we unwrap to get a
-    contiguous radian range the optimizer can work with.
-    """
+    """Compute (lo_rad, hi_rad) bounds for each FK joint."""
     params = _cal_params(cal or JointCalibration())
     bounds = []
     for j, mid in enumerate((1, 2, 3, 4)):
         center, invert = params[j]
-        lo_tick, hi_tick, wraps = JOINT_LIMITS.get(mid, (0, 4095, False))
-
-        if not wraps:
-            lo_rad = tick_to_rad(lo_tick, center, invert)
-            hi_rad = tick_to_rad(hi_tick, center, invert)
-            bounds.append((min(lo_rad, hi_rad), max(lo_rad, hi_rad)))
-        else:
-            # Wrapping joint: safe zone is [lo_tick..4095] ∪ [0..hi_tick].
-            # Unwrap hi_tick past 4096 to make it contiguous.
-            lo_rad = tick_to_rad(lo_tick, center, invert)
-            hi_unwrapped = hi_tick + 4096  # treat as continuous
-            hi_rad = ((hi_unwrapped - center) / TICKS_PER_REV) * (2.0 * math.pi)
-            if invert:
-                hi_rad = -hi_rad
-            bounds.append((min(lo_rad, hi_rad), max(lo_rad, hi_rad)))
-
+        lo_tick, hi_tick, _ = JOINT_LIMITS.get(mid, (0, 4095, False))
+        lo_rad = tick_to_rad(lo_tick, center, invert)
+        hi_rad = tick_to_rad(hi_tick, center, invert)
+        bounds.append((min(lo_rad, hi_rad), max(lo_rad, hi_rad)))
     return bounds
 
 
@@ -100,11 +83,8 @@ class IKSolver:
         def _seed_ticks(frac):
             t = {}
             for mid in (1, 2, 3, 4):
-                lo, hi, wraps = JOINT_LIMITS.get(mid, (0, 4095, False))
-                if wraps:
-                    t[mid] = lo
-                else:
-                    t[mid] = int(lo + (hi - lo) * frac)
+                lo, hi, _ = JOINT_LIMITS.get(mid, (0, 4095, False))
+                t[mid] = int(lo + (hi - lo) * frac)
             return t
 
         seeds = [

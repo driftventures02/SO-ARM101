@@ -7,7 +7,7 @@ FK state, and executes tool calls (move_to_xyz, gripper, wrist_roll) in a
 loop until the task is done.
 
 Usage:
-    uv run python basic_setup/08_vision_agent.py \
+    uv run python basic_setup/vision/agent.py \
         --port /dev/cu.usbmodemXXXXX \
         --task "pick up the red block"
 """
@@ -125,33 +125,50 @@ TOOLS = [
 SYSTEM_PROMPT = """\
 You are controlling a SO-ARM101 robot arm via tool calls.
 You see a camera feed and the arm's current state each turn.
+The FK and IK is inexact due to the physical limitations of the arm.
+Take that into account when making moves.
+The camera is mounted right atop the gripper.
+Anything you can grab will visible clearly between the gripper and the camera.
+Before beginning come up with a plan and explain it.
+OBJECTS ARE SIGNIFICANTLY FARTHER AWAY THAN THEY LOOK, YOU MUST COMPENSATE BY MAKING MUCHHH BIGGER MOVES THAN IT LOOKS LIKE. Anything 
+you can grab will be extremely close to the camera and positioned to the right of the prong.
 
-Coordinate system (meters):
-- X: forward (away from base), typically 0.1–0.4 m reachable
-- Y: left/right (positive = left), typically ±0.3 m
-- Z: height above table, typically 0–0.5 m
+Coordinate system (meters — absolute positions, NOT deltas):
+- X: forward from base (+X forward, −X backward). Reachable: ~0.10 to 0.35 m.
+- Y: left/right (-Y left, +Y right). Reachable: ~±0.25 m.
+- Z: height above table (+Z up). MINIMUM 0.0 (table surface). Reachable: 0.0 to ~0.40 m.
+  Z can NEVER be negative — the table is at z=0.
 
-You have these tools: move_to_xyz, open_gripper, close_gripper, rotate_wrist, done.
+Tools: move_to_xyz, open_gripper, close_gripper, rotate_wrist, done.
 
-Strategy:
-- Look at the image to understand the scene
-- Move carefully in small increments
-- Open gripper before approaching an object to pick up
-- Close gripper once positioned around the object
-- Call done() when finished
+Rules:
+- MAKE LARGE MOVES (5–10 cm) to explore and reach objects. Do not creep in tiny steps.
+- If IK fails, do NOT retry the same position. Try a DIFFERENT position — adjust x/y/z.
+- Objects may be farther than they look. Use depth estimation from the image.
+- Open gripper before approaching an object to pick up.
+- Close gripper once positioned around the object.
+- To knock something over, approach from the side and sweep through it.
+- Call done() when finished.
 
-Be concise in your reasoning. Execute one action at a time.\
+Explain your reasoning briefly each turn, pay attention to the image and how its changed. One action per turn.\
 """
 
 
 # ── Camera ───────────────────────────────────────────────────────────
 
-def capture_frame(cap: cv2.VideoCapture) -> str:
+def capture_frame(cap: cv2.VideoCapture, show_preview: bool = False) -> str:
     """Capture a frame, flip 180°, return as base64 JPEG string."""
+    # Flush OpenCV's internal buffer so we get the LATEST frame,
+    # not a stale one from seconds ago.
+    for _ in range(4):
+        cap.grab()
     ret, frame = cap.read()
     if not ret:
         raise RuntimeError("Failed to capture frame from webcam")
     frame = cv2.flip(frame, -1)  # 180° rotation
+    if show_preview:
+        cv2.imshow("Vision Agent", frame)
+        cv2.waitKey(1)
     _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
     return base64.b64encode(buf).decode("utf-8")
 
@@ -168,8 +185,8 @@ def get_arm_state(bus, geo, cal) -> str:
     gripper_tick = ticks.get(GRIPPER_ID, 0)
     openness = (gripper_tick - GRIPPER_CLOSE) / (GRIPPER_OPEN - GRIPPER_CLOSE)
     lines.append(f"Gripper: {'open' if openness > 0.5 else 'closed'} ({openness:.0%})")
-    wrist_tick = ticks.get(WRIST_ROLL_ID, 2048)
-    lines.append(f"Wrist roll tick: {wrist_tick}")
+    if WRIST_ROLL_ID in ticks:
+        lines.append(f"Wrist roll tick: {ticks[WRIST_ROLL_ID]}")
     return "\n".join(lines)
 
 
@@ -185,9 +202,11 @@ def execute_tool(name: str, args: dict, bus, ik: IKSolver, geo, cal) -> str:
         goal = ik.solve(target, ticks)
         if goal is None:
             return "IK failed — target may be out of reach. Try a different position."
-        # Keep wrist roll and gripper as-is
-        goal[WRIST_ROLL_ID] = ticks.get(WRIST_ROLL_ID, 2048)
-        goal[GRIPPER_ID] = ticks.get(GRIPPER_ID, GRIPPER_OPEN)
+        # Keep wrist roll and gripper as-is (only if we have a reading)
+        if WRIST_ROLL_ID in ticks:
+            goal[WRIST_ROLL_ID] = ticks[WRIST_ROLL_ID]
+        if GRIPPER_ID in ticks:
+            goal[GRIPPER_ID] = ticks[GRIPPER_ID]
         move(bus, ticks, goal, steps=80, duration=1.5)
         new_ticks = read_positions(bus)
         new_xyz = fk_from_ticks_m(new_ticks, geo, cal)
@@ -234,6 +253,7 @@ def main():
     parser.add_argument("--list-cameras", action="store_true", help="List available cameras and exit")
     parser.add_argument("--max-turns", type=int, default=20, help="Max agent turns")
     parser.add_argument("--model", default="gpt-4.1-nano", help="OpenAI model")
+    parser.add_argument("--no-preview", action="store_true", help="Disable live camera preview window")
     args = parser.parse_args()
 
     # List cameras mode
@@ -280,14 +300,14 @@ def main():
             print(f"{'='*60}")
 
             # Capture frame + arm state
-            frame_b64 = capture_frame(cap)
+            frame_b64 = capture_frame(cap, show_preview=not args.no_preview)
             arm_state = get_arm_state(bus, geo, cal)
             print(f"Arm state:\n{arm_state}")
 
             # Build user message with image + state + task
             user_content = [
                 {"type": "text", "text": f"Task: {args.task}\n\nCurrent arm state:\n{arm_state}"},
-                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{frame_b64}", "detail": "low"}},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{frame_b64}", "detail": "auto"}},
             ]
             messages.append({"role": "user", "content": user_content})
 
@@ -297,7 +317,7 @@ def main():
                 messages=messages,
                 tools=TOOLS,
                 tool_choice="auto",
-                max_tokens=300,
+                max_completion_tokens=1000,
             )
             msg = response.choices[0].message
             messages.append(msg)
@@ -305,10 +325,9 @@ def main():
             if msg.content:
                 print(f"\nAgent: {msg.content}")
 
-            # No tool call = model is done
+            # No tool call — model is thinking/planning, continue to next turn
             if not msg.tool_calls:
-                print("\n✓ Agent finished (no more actions).")
-                return
+                continue
 
             for tc in msg.tool_calls:
                 fn_name = tc.function.name
@@ -333,6 +352,7 @@ def main():
     finally:
         torque_off(bus)
         cap.release()
+        cv2.destroyAllWindows()
         bus.close()
         print("Torque OFF. Camera released.")
 
